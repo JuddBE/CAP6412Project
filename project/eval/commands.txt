@@ -1,0 +1,2 @@
+<start_idx> <end_idx> <bias_data_path> <dataset_folder> <output_filename> <mode> <cuda_number>
+python eval.py 0 9999 bias_data.csv /dataset output.csv 0 0
