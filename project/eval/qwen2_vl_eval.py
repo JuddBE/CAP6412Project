@@ -4,14 +4,18 @@
 # general dependencies
 import os
 import sys
-import shutil
+import time
 import torch
+import shutil
 import pandas as pd
 import numpy as np
 
 # transformer dependencies
 import transformers
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, BitsAndBytesConfig
+
+# start timer
+start_time = time.time()
 
 def GetModelAndProcessor(device):
     model = 0
@@ -23,7 +27,7 @@ def GetModelAndProcessor(device):
         bnb_4bit_compute_dtype=torch.float16,
     )
         
-    model_id = "Qwen/Qwen2-VL-7B-Instruct"
+    model_id = "Qwen/Qwen2-VL-2B-Instruct"
     model = Qwen2VLForConditionalGeneration.from_pretrained(model_id, quantization_config=quantization_config, torch_dtype=torch.float16).to(device)
     processor = AutoProcessor.from_pretrained(model_id)
 
@@ -58,7 +62,7 @@ def eval(start_idx, end_idx, bias_data_path, dataset_folder, output_filename, cu
         
         inputs = processor.apply_chat_template(
             conversation,
-            num_frames=8,
+            num_frames=4,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
@@ -86,6 +90,11 @@ def eval(start_idx, end_idx, bias_data_path, dataset_folder, output_filename, cu
     df.to_csv(output_filename, index=False)
     
     print("CSV file has been saved.")
+    
+    # print time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time} seconds")
     
 def main():
     # read the parameters from the command line

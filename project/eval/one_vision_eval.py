@@ -4,14 +4,18 @@
 # general dependencies
 import os
 import sys
-import shutil
+import time
 import torch
+import shutil
 import pandas as pd
 import numpy as np
 
 # transformer dependencies
 import transformers
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration, BitsAndBytesConfig
+
+# start timer
+start_time = time.time()
 
 def GetModelAndProcessor(device):
     model = 0
@@ -86,6 +90,11 @@ def eval(start_idx, end_idx, bias_data_path, dataset_folder, output_filename, cu
     df.to_csv(output_filename, index=False)
     
     print("CSV file has been saved.")
+    
+    # print time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time} seconds")
     
 def main():
     # read the parameters from the command line
