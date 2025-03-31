@@ -101,10 +101,10 @@ def main():
     # read the parameters from the command line
     start_idx = int(sys.argv[1])
     end_idx = int(sys.argv[2])
-    bias_data_path = sys.argv[3]
-    dataset_folder = sys.argv[4]
-    output_filename = sys.argv[5]
-    cuda_number = sys.argv[6]
+    bias_data_path = ".\\CAP6412Project\\project\\image_bias_data.csv" # sys.argv[3]
+    dataset_folder = ".\\haa500_v1_1\\" # sys.argv[4]
+    output_filename = "qwen2_5_output.csv" # sys.argv[5]
+    cuda_number = "0" # sys.argv[6]
     
     # run eval
     eval(start_idx, end_idx, bias_data_path, dataset_folder, output_filename, cuda_number)
