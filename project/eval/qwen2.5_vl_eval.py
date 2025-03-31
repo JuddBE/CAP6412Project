@@ -36,60 +36,61 @@ def GetModelAndProcessor(device):
 def eval(start_idx, end_idx, bias_data_path, dataset_folder, output_filename, cuda_number):
     # get comparison data and prepare new data
     bias_data = pd.read_csv(bias_data_path)
-    new_data = []
 
     device = "cuda:" + str(cuda_number)
     model, processor = GetModelAndProcessor(device)
     
-    for idx in range(start_idx, end_idx + 1):
-        sample = bias_data.iloc[idx]
-        vid_path = dataset_folder + sample['vidPath']
-        
-        prep = "I am gonna ask 3 multiple choice questions please answer each to the best of your ability. Each of your three answers should be exactly one word!"
-        q1 = " 1. What gender of the person between male, female, other, or unknown?"
-        q2 = " 2. What age of the person child, teenager, adult, middle-aged, senior, or unknown?"
-        q3 = " 3. What race of the person between white, black, indian, east-asian, southeast-asian, middle-eastern, latino, or unknown?"
-        
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video", "path": vid_path},
-                    {"type": "text", "text": prep + q1 + q2 + q3},
-                    ],
-            },
-        ]
-        
-        inputs = processor.apply_chat_template(
-            conversation,
-            num_frames=4,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt"
-        ).to(model.device, torch.float16)
-        
-        out = model.generate(**inputs, pad_token_id=151645)
-        output = processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+    try:
+        for idx in range(start_idx, end_idx + 1):
+            sample = bias_data.iloc[idx]
+            vid_path = dataset_folder + sample['vidPath']
+            
+            prep = "I am gonna ask 3 multiple choice questions please answer each to the best of your ability. Each of your three answers should be exactly one word!"
+            q1 = " 1. What gender of the person between male, female, other, or unknown?"
+            q2 = " 2. What age of the person child, teenager, adult, middle-aged, senior, or unknown?"
+            q3 = " 3. What race of the person between white, black, indian, east-asian, southeast-asian, middle-eastern, latino, or unknown?"
+            
+            conversation = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video", "path": vid_path},
+                        {"type": "text", "text": prep + q1 + q2 + q3},
+                        ],
+                },
+            ]
+            
+            inputs = processor.apply_chat_template(
+                conversation,
+                num_frames=4,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt"
+            ).to(model.device, torch.float16)
+            
+            out = model.generate(**inputs, pad_token_id=151645)
+            output = processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-        data = {
-            'action': sample['action'],
-            'sample': sample['sample'],
-            'imgPath': sample['imgPath'],
-            'vidPath': sample['vidPath'],
-            'dataset': "default",
-            'response': output
-        }
+            data = {
+                'action': sample['action'],
+                'sample': sample['sample'],
+                'imgPath': sample['imgPath'],
+                'vidPath': sample['vidPath'],
+                'dataset': "default",
+                'response': output
+            }
+
+            # Convert single data dictionary to a DataFrame
+            df = pd.DataFrame([data])
         
-        new_data.append(data)
-        
-    # convert list of dictionaries to DataFrame
-    df = pd.DataFrame(new_data)
+            # Append to CSV, adding header only if file doesn't exist
+            df.to_csv(output_filename, mode='a', header=not pd.io.common.file_exists(output_filename), index=False)
+            
+    except Exception as e:
+        print(f"An error occurred: {e}")
     
-    # save DataFrame to CSV
-    df.to_csv(output_filename, index=False)
-    
-    print("CSV file has been saved.")
+    print("Finished!")
     
     # print time
     end_time = time.time()
@@ -100,10 +101,10 @@ def main():
     # read the parameters from the command line
     start_idx = int(sys.argv[1])
     end_idx = int(sys.argv[2])
-    bias_data_path = sys.argv[3]
-    dataset_folder = sys.argv[4]
-    output_filename = sys.argv[5]
-    cuda_number = sys.argv[6]
+    bias_data_path = ".\\CAP6412Project\\project\\image_bias_data.csv" # sys.argv[3]
+    dataset_folder = ".\\haa500_v1_1\\" # sys.argv[4]
+    output_filename = "qwen2_5_output.csv" # sys.argv[5]
+    cuda_number = "0" # sys.argv[6]
     
     # run eval
     eval(start_idx, end_idx, bias_data_path, dataset_folder, output_filename, cuda_number)
