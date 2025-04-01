@@ -28,7 +28,7 @@ def GetModelAndProcessor(device):
     )
         
     model_id = "Qwen/Qwen2.5-VL-3B-Instruct"
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, quantization_config=quantization_config, torch_dtype=torch.float16).to(device)
+    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, quantization_config=quantization_config, torch_dtype=torch.bfloat16).to(device)
     processor = AutoProcessor.from_pretrained(model_id)
 
     return model, processor
