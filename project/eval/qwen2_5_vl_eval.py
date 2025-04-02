@@ -1,5 +1,5 @@
 # Acknowledgement, Hugging Face heavily influenced the creation of this code
-# Model Link: https://huggingface.co/docs/transformers/main/en/model_doc/llava_next_video
+# Model Link: https://huggingface.co/docs/transformers/main/model_doc/qwen2_vl
 
 # general dependencies
 import os
@@ -12,7 +12,7 @@ import numpy as np
 
 # transformer dependencies
 import transformers
-from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor, BitsAndBytesConfig
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor, BitsAndBytesConfig
 
 # Import Prompts
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,9 +20,9 @@ parent_dir = os.path.abspath(os.path.join(script_dir, ".."))
 sys.path.insert(0, parent_dir)
 from tools.prompts import Prompts
 
-class LlavaNextVision:
+class Qwen2_5VL:
     def __init__(self, cuda_number=0):
-        print("\nInitializing LlavaNextVision!")
+        print("\nInitializing Qwen2_5VL!")
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.results_dir = os.path.normpath(os.path.join(script_dir, "..", "results"))
@@ -32,17 +32,20 @@ class LlavaNextVision:
         self.model, self.processor = self.GetModelAndProcessor()
 
     def GetModelAndProcessor(self):
+        model = 0
+        processor = 0
+        
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.float16,
         )
             
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
-        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=quantization_config, torch_dtype=torch.float16
+        model_id = "Qwen/Qwen2.5-VL-3B-Instruct"
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            model_id, quantization_config=quantization_config, torch_dtype=torch.bfloat16
         ).to(self.device)
-        processor = LlavaNextVideoProcessor.from_pretrained(model_id)
+        processor = AutoProcessor.from_pretrained(model_id)
 
         return model, processor
 
@@ -51,7 +54,7 @@ class LlavaNextVision:
 
         output_directory = os.path.join(self.results_dir, output_directory)
         os.makedirs(output_directory, exist_ok=True)
-        output_filename = os.path.join(output_directory, "llava_next_video_output.csv")
+        output_filename = os.path.join(output_directory, "qwen2_5_vl_output.csv")
         
         try:
             for idx in range(start_idx, end_idx + 1):
@@ -74,7 +77,7 @@ class LlavaNextVision:
                 
                 inputs = self.processor.apply_chat_template(
                     conversation,
-                    num_frames=8,
+                    num_frames=4,
                     add_generation_prompt=True,
                     tokenize=True,
                     return_dict=True,
@@ -102,7 +105,7 @@ class LlavaNextVision:
         except Exception as e:
             print(f"An error occurred: {e}")
         
-        print("LlavaNextVision Finished!")
+        print("Qwen2_5VL Finished!")
         
         # print time
         end_time = time.time()
@@ -143,8 +146,8 @@ def main():
     prompts = Prompts()
     prompt = prompts.GetPrompt(prompt_idx)
     
-    llavaNextVision = LlavaNextVision(cuda_number=cuda_number)
-    llavaNextVision.eval(
+    qwen_2_5_vl = Qwen2_5VL(cuda_number=cuda_number)
+    qwen_2_5_vl.eval(
         start_idx=start_idx,
         end_idx=end_idx,
         bias_data_path=bias_data_path,
