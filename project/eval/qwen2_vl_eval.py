@@ -25,7 +25,7 @@ class Qwen2VL:
         print("\nInitializing Qwen2VL!")
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.results_dir = os.path.normpath(os.path.join(script_dir, "..", "results"))
+        self.results_dir = os.path.normpath(os.path.join(script_dir, "..", "results", "video"))
 
         self.device = f"cuda:{cuda_number}"
         self.start_time = time.time()

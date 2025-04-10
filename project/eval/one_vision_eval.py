@@ -21,32 +21,39 @@ sys.path.insert(0, parent_dir)
 from tools.prompts import Prompts
 
 class OneVision:
-    def __init__(self, cuda_number=0):
+    def __init__(self, cuda_number=0, bit8=False):
         print("\nInitializing OneVision!")
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.results_dir = os.path.normpath(os.path.join(script_dir, "..", "results"))
+        self.results_dir = os.path.normpath(os.path.join(script_dir, "..", "results", "video"))
 
         self.device = f"cuda:{cuda_number}"
         self.start_time = time.time()
-        self.model, self.processor = self.GetModelAndProcessor()
+        self.model, self.processor = self.GetModelAndProcessor(bit8)
 
-    def GetModelAndProcessor(self):
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-        )
+    def GetModelAndProcessor(self, bit8=False):
+        if bit8:
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                bnb_8bit_quant_type="nf4",
+                bnb_8bit_compute_dtype=torch.float16,
+            )
+        else:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+            )
             
         model_id = "llava-hf/llava-onevision-qwen2-7b-ov-hf"
         model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=quantization_config, torch_dtype=torch.float16
-        ).to(self.device)
+            model_id, quantization_config=quantization_config, torch_dtype=torch.float16, device_map=self.device
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         return model, processor
 
-    def eval(self, start_idx, end_idx, bias_data_path, dataset_folder, text_prompt, output_directory="default", dataset_tag="default"):
+    def eval(self, start_idx, end_idx, bias_data_path, dataset_folder, text_prompt, output_directory="default", dataset_tag="default", num_frames=8):
         bias_data = pd.read_csv(bias_data_path)
 
         output_directory = os.path.join(self.results_dir, output_directory)
@@ -74,7 +81,7 @@ class OneVision:
                 
                 inputs = self.processor.apply_chat_template(
                     conversation,
-                    num_frames=8,
+                    num_frames=num_frames,
                     add_generation_prompt=True,
                     tokenize=True,
                     return_dict=True,
@@ -116,6 +123,31 @@ class OneVision:
         del self.model
         torch.cuda.empty_cache()
     
+def ablation():
+    start_idx = 0
+    end_idx = 10074
+    bias_data_path = ".\\combined.csv"
+    dataset_folder = ".\\haa500_v1_1\\"
+    cuda_number = 0
+    prompts = Prompts()
+    for bit8 in [True, False]:
+        with OneVision(cuda_number=cuda_number, bit8=bit8) as one_vision:
+            for prompt_idx in [0, 1, 6]:
+                prompt = prompts.GetPrompt(prompt_idx)
+                for num_frames in [2, 4, 6, 8]:
+                    for dataset_tag in ["default", "HAA500-B"]:
+                        output_directory = f"ablation\\prompt{prompt_idx}\\quant{"8" if bit8 else "4"}\\frames{num_frames}"
+                        one_vision.eval(
+                            start_idx=start_idx,
+                            end_idx=end_idx,
+                            bias_data_path=bias_data_path,
+                            dataset_folder=dataset_folder,
+                            text_prompt=prompt,
+                            output_directory=output_directory,
+                            dataset_tag=dataset_tag,
+                            num_frames=num_frames
+                        )
+
 def main():
     # read the parameters from the command line
     start_idx = int(sys.argv[1])
@@ -155,4 +187,5 @@ def main():
     )
 
 if __name__ == "__main__":
-    main()
+    # main()
+    ablation()

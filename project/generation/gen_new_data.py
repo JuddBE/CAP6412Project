@@ -7,13 +7,13 @@ from moviepy import VideoFileClip
 def generate(original_data, new_data, dataset_folder):
     original_data = pd.read_csv(original_data)
     new_data = pd.read_csv(new_data)
-    
+
     generated = []
     for index, row in new_data.iterrows():
         # data related to img and vid paths
         actual_index = "0" + str(20 + index % 5)
         imgPath = "/images/" + row['action'] + "/" + row['action'] + "_" + actual_index + ".png"
-        vidPath = "/video/" + row['action'] + "/" + row['action'] + "_" + actual_index + ".png"
+        vidPath = "/video/" + row['action'] + "/" + row['action'] + "_" + actual_index + ".mp4"
         
         # get video
         video_url = row['link']
@@ -51,9 +51,6 @@ def generate(original_data, new_data, dataset_folder):
         
         # add to list of generated samples
         generated.append(data)
-        
-        if index == 5:
-            break;
       
     # save new csv with all data
     final = pd.DataFrame(generated)
