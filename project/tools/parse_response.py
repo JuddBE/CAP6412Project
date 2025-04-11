@@ -1,4 +1,5 @@
 import sys
+import os
 import re
 import pandas as pd
 
@@ -32,11 +33,16 @@ class CSVModifier:
             print("Column 'response' not found in the CSV. No modifications made.")
         
     
-    def extract_answers(self, model_output):
+    def extract_answers(self, model_output, is_recursive=False):
         result = []
 
+        # Replace literal "\n" with an actual newline character
+        model_output = model_output.replace("\\n", "\n")
+
+        # Normalize model output to lowercase for easier matching
         model_output = model_output.lower()
 
+        # Preprocess options: remove leading/trailing whitespace and replace spaces with hyphens
         modified_options = self.prompt_options.copy()
         for i, options in enumerate(self.prompt_options):
             if options is None:
@@ -44,6 +50,7 @@ class CSVModifier:
             else:
                 modified_options[i] = [option.strip().replace(" ", "-") for option in options]
 
+        # Modify model_output to replace matching multi-word options with hyphenated versions
         for options in self.prompt_options:
             if options is not None:
                 for option in options:
@@ -51,6 +58,7 @@ class CSVModifier:
                     if " " in mod_option:
                         model_output = model_output.replace(mod_option, mod_option.replace(" ", "-"))
 
+        # Construct lowercase categories and associated keys for extraction
         categories = []
         keys = []
         for key, opts in zip(self.prompt_columns, modified_options):
@@ -62,21 +70,36 @@ class CSVModifier:
         num_cats = len(categories)
         if num_cats == 0:
             return []
+        
+        # Handle special case: if the substring "assistant" is found in model_output
+        assistant_match = re.search(r'assistant', model_output, re.IGNORECASE)
+        if assistant_match:
+            # Extract everything after the matched "assistant"
+            assistant_text = model_output[assistant_match.end():]
+            
+            # Recursively call extract_answers on the extracted text
+            assistant_result = self.extract_answers(assistant_text, True)
+            
+            # If not all returned items are "error", then use the assistant_result
+            if not all(item.lower() == "error" for item in assistant_result):
+                return assistant_result
 
-        # Remove any parenthetical content which may contain options
-        model_output = re.sub(r"\(option[^)]*\)", "", model_output).strip()
-
-        # Check for answers that might exist in parantheses
+        # Handle special case: if possible answers are in parentheses
         paren_matches = re.findall(r'\(.*?([^)]+)\)', model_output, re.IGNORECASE)
         if len(paren_matches) == num_cats:
-            paren_result = self.extract_answers(" ".join(paren_matches))
-            return paren_result
+            # Recursively call extract_answers on the extracted text
+            paren_result = self.extract_answers(" ".join(paren_matches), True)
+            if all(item.lower() == "error" for item in paren_result):
+                # If parentheses don't help, remove them from the string
+                model_output = re.sub(r'\([^)]*\)', '', model_output)
+            else:
+                return paren_result
 
-        # Remove punctuation characters except spaces and hyphens (which may appear within words)
+        # Remove all punctuation except for spaces and hyphens
         model_output = re.sub(r"[^\w\s\-]", "", model_output)
-
         tokens = model_output.split()
         
+        # Determine max token length for each category to guide the backtracking
         max_tokens = []
         for opts in categories:
             max_len = max(len(opt.split()) for opt in opts)
@@ -84,6 +107,7 @@ class CSVModifier:
 
         solutions = []
 
+        # Recursive backtracking to find all valid combinations of category matches
         def backtrack(cat_idx, token_idx, current):
             if cat_idx == num_cats:
                 solutions.append(current[:])
@@ -92,8 +116,10 @@ class CSVModifier:
             if token_idx >= len(tokens):
                 return
             
+            # Try skipping this token
             backtrack(cat_idx, token_idx + 1, current)
 
+            # Try matching substrings of increasing length
             for l in range(max_tokens[cat_idx], 0, -1):
                 if token_idx + l > len(tokens):
                     continue
@@ -101,30 +127,14 @@ class CSVModifier:
                 if candidate in categories[cat_idx]:
                     backtrack(cat_idx + 1, token_idx + l, current + [candidate])
 
+        # Start backtracking from the beginning
         backtrack(0, 0, [])
 
-        # print(f"solutions: {solutions}")
-
-        # def backtrack(cat_idx, token_idx, current):
-        #     if cat_idx == num_cats:
-        #         solutions.append(current[:])
-        #         return
-            
-        #     for i in range(token_idx, len(tokens)):
-        #         for l in range(1, max_tokens[cat_idx] + 1):
-        #             if i + l > len(tokens):
-        #                 break
-        #             candidate = " ".join(tokens[i:i+l])
-
-        #             if candidate in categories[cat_idx]:
-        #                 backtrack(cat_idx + 1, i + l, current + [candidate])
-
-        # for start in range(len(tokens)):
-        #     backtrack(0, start, [])
-
+        # If no valid solution was found
         if not solutions:
             result = ["ERROR"] * num_cats
         else:
+            # Choose the longest unambiguous answer for each category
             for cat_idx in range(num_cats):
                 candidate_set = {sol[cat_idx] for sol in solutions}
                 max_token_count = max(len(candidate.split()) for candidate in candidate_set)
@@ -134,133 +144,28 @@ class CSVModifier:
                 else:
                     result.append("ERROR")
         
+        # Replace hyphenated or modified answers with their original formatting
         for i in range(len(result)):
             for j in range(len(modified_options)):
                 if modified_options[j] is not None:
                     for k in range(len(modified_options[j])):
                         if result[i].strip().lower() == modified_options[j][k].strip().lower() and result[i] != self.prompt_options[j][k].strip().lower():
                             result[i] = self.prompt_options[j][k].strip().lower()
+        
+        # Print debug message if there's an error and this is the top-level call
+        if not is_recursive:
+            has_error = False
+            for r in result:
+                if r.strip().lower() == "error":
+                    has_error = True
+                    break
+            if has_error:
+                print(f"Model output has an ERROR: {model_output}")
 
         return result
 
-        # allowed_options = {
-        #     'one_person': self.prompt_options[1],
-        #     'face_visible': self.prompt_options[2],
-        #     'gender': self.prompt_options[3],
-        #     'age': self.prompt_options[4],
-        #     'race': self.prompt_options[5],
-        # }
-        # keys = ['one_person', 'face_visible', 'gender', 'age', 'race']
-
-        allowed_options = {
-            key: self.prompt_options[i]
-            for i, key in enumerate(self.prompt_columns)
-            if key is not None and self.prompt_options[i] is not None
-        }
-
-        segments = re.findall(r"(\d+\.\s*.*?)(?=\d+\.\s*|$)", model_output, flags=re.DOTALL)
-
-        if len(segments) == 0:
-            segments = re.findall(r'\S+', model_output)
-        if len(segments) < len(self.prompt_options) - 1:
-            segments += [""] * (5 - len(segments))
-        
-        answers = []
-        has_error = False
-
-        for idx, key in enumerate(self.valid_columns):
-            seg = segments[idx].strip().lower()
-
-            # Remove the questions from seg
-            for phrase in self.text_prompts:
-                if phrase is not None:
-                    phrase = phrase.lower()
-                    if phrase in seg:
-                        seg = re.sub(re.escape(phrase), "", seg, flags=re.IGNORECASE).strip()
-
-            # Remove any parenthetical content which may contain options
-            seg = re.sub(r"\(option[^)]*\)", "", seg).strip()
-
-            # If a colon (:) exists, assume the answer is after it
-            if ":" in seg:
-                candidate = seg.split(":")[-1].strip()
-            else:
-                candidate = seg.strip()
-
-            # print(f"A: {candidate}")
-
-            # Get allowed options for the key
-            options = allowed_options.get(key, [])
-
-            # First, check for an exact match
-            exact_matches = [option.lower() for option in options if candidate == option.lower()]
-            if len(exact_matches) == 1:
-                found_option = exact_matches[0]
-                # print(f"B: {found_option}")
-            else:
-                # Otherwise, perform a word-boundary search with the allowed options.
-                # Sort options in descending order by length to ensure longer phrases (like "not visible")
-                # are considered before shorter ones.
-                options_sorted = sorted(options, key=lambda x: len(x), reverse=True)
-                matches = []
-                for option in options_sorted:
-                    option = option.lower()
-                    # print(f"C: {option}")
-                    pattern = rf'(?:(?<=^)|(?<=[\s\.,;:!?\-\(\)])){re.escape(option)}(?=$|[\s\.,;:!?\-\(\)])'
-                    if re.search(pattern, candidate):
-                        accounted_for = False
-                        for m in matches:
-                            if " " + option + " " in " " + m + " ":
-                                accounted_for = True
-                        if not accounted_for:
-                            matches.append(option)
-                            # print(f"D: {option}")
-                if len(matches) == 1:
-                    found_option = matches[0]
-                    # print(f"E: {found_option}")
-                else:
-                    found_option = None
-
-            # Sort options in descending order of length to check longer phrases first
-            # options_sorted = sorted(options, key=lambda x: len(x), reverse=True)
-
-            # # Find all options matching as separate words (use boundaries)
-            # matches = []
-            # for option in options_sorted:
-            #     option = option.lower()
-                
-            #     # Pattern that only matches when the option appears as a distinct word.
-            #     pattern = rf'(?:(?<=^)|(?<=[\s\.,;:!?\-])){re.escape(option)}(?=$|[\s\.,;:!?\-])'
-            #     if re.search(pattern, candidate):
-            #         matches.append(option)
-
-            # # If candidate contains more than one valid option or none, record an error
-            # if len(matches) != 1 or candidate == "":
-            #     answers.append("ERROR")
-            #     has_error = True
-            # else:
-            #     answers.append(matches[0])
-
-            # # Compare the candidate against the allowed options for this key
-            # found_option = None
-            # for option in allowed_options.get(key, []):
-            #     option = option.lower()
-            #     if re.search(rf'(?:(?<=^)|(?<=[\s\.,;:!\?\-])){re.escape(option)}(?=$|[\s\.,;:!\?\-])', candidate.lower()):
-            #         found_option = option
-            #         break
-            
-            if found_option is None or candidate == "":
-                answers.append("ERROR")
-                has_error = True
-            else:
-                answers.append(found_option)
-
-        if has_error:
-            print(f"Model output has an ERROR: {model_output}")
-        
-        return answers
-
     def process_csv(self):
+        print(f"Parsing: {self.file_path}")
         df = pd.read_csv(self.output_path)
 
         def update_row(row):
@@ -283,16 +188,30 @@ class CSVModifier:
         self.process_csv()
 
 def main():
-    file_path = sys.argv[1]
-    prompt_idx = int(sys.argv[2])
+    id = 0
+    if sys.argv[1] == "-d":
+        id = 1
+    
+    file_path = sys.argv[id + 1]
+    prompt_idx = int(sys.argv[id + 2])
 
     output_path = None
 
-    if len(sys.argv) > 3:
-        output_path = sys.argv[3]
+    if len(sys.argv) > id + 3:
+        output_path = sys.argv[id + 3]
 
-    csv_modifier = CSVModifier(file_path, prompt_idx, output_path)
-    csv_modifier.run()
+    if id == 0:
+        csv_modifier = CSVModifier(file_path, prompt_idx, output_path)
+        csv_modifier.run()
+    else:
+        for root, dirs, files in os.walk(file_path):
+            for file in files:
+                if file.lower().endswith(".csv"):
+                    csv_full_path = os.path.join(root, file)
+                    csv_modifier = CSVModifier(csv_full_path, prompt_idx, output_path)
+                    csv_modifier.run()
+
+
     # test_strings = [
     #     "1. yes 2. visible 3. male 4. child 5. White",
     #     "1. Number of People: yes (Options: yes / no) 2. Face Visibility: visible (Options: visible / not visible) 3. Gender: male (Options: male / female / other) 4. Age Group: teenager (Options: child / teenager / adult / middle-aged / senior) 5. Race/Ethnicity: White (Options: White / Black / Indian / East Asian / Southeast Asian / Middle Eastern / Latino)",
@@ -301,7 +220,13 @@ def main():
     #     "1. Number of People: yes / no (Answer: yes) 2. Face Visibility: visible / not visible (Answer: visible) 3. Gender: female / other (Answer: female) 4. Age Group: adult / middle-aged / senior (Answer: middle-aged) 5. Race/Ethnicity: East Asian / Southeast Asian (Answer: Southeast Asian)",
     #     "1. yes 2. not visible 3. female 4. adult 5. White",
     #     "1. yes 2. not visible 3. female 4. adult 5. Southeast asian",
-    #     "1. yes 2. not visible visible 3. female 4. adult 5. Southeast asian"
+    #     "1. yes 2. not visible visible 3. female 4. adult 5. Southeast asian",
+    #     "1. Number of People: yes (1) 2. Face Visibility: visible (1) 3. Gender: female (1) 4. Age Group: adult (1) 5. Race/Ethnicity: Indian (1)",
+    #     "1. Number of People: yes (1/1) 2. Face Visibility: visible (1/1) 3. Gender: male (1/1) 4. Age Group: adult (1/1) 5. Race/Ethnicity: White (1/1)",
+    #     "['user \nPlease answer the following three multiple choice questions based only on the image. Be objective and make your choice without making unsupported assumptions. Provide each answer on a new line with the selected option. Do not restate the questions or include any extra text. 1. What is the gender of the person: male, female, or other. 2. Which age group does the person appear to belong to: child, teenager, adult, middle-aged, or senior. 3. What is the apparent race or ethnicity of the person: White, Black, Indian, East-Asian, Southeast-Asian, Middle-Eastern, or Latino.assistant\n1. male\n2. adult\n3. White']",
+    #     "['USER: \nPlease answer the following three multiple choice questions based only on the image. Be objective and make your choice without making unsupported assumptions. Provide each answer on a new line with the selected option. Do not restate the questions or include any extra text. 1. What is the gender of the person: male, female, or other. 2. Which age group does the person appear to belong to: child, teenager, adult, middle-aged, or senior. 3. What is the apparent race or ethnicity of the person: White, Black, Indian, East-Asian, Southeast-Asian, Middle-Eastern, or Latino. ASSISTANT: 1. Male\n2. Adult\n3. Middle-aged']",
+    #     "['USER: \nPlease answer the following three multiple choice questions based only on the image. Be objective and make your choice without making unsupported assumptions. Provide each answer on a new line with the selected option. Do not restate the questions or include any extra text. 1. What is the gender of the person: male, female, or other. 2. Which age group does the person appear to belong to: child, teenager, adult, middle-aged, or senior. 3. What is the apparent race or ethnicity of the person: White, Black, Indian, East-Asian, Southeast-Asian, Middle-Eastern, or Latino. ASSISTANT: 1. Male\n2. Adult\n3. Middle-Eastern']",
+    #     "female child adult",
     # ]
     # for s in test_strings:
     #     answers = csv_modifier.extract_answers(s)

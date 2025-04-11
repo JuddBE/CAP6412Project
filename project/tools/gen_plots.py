@@ -20,8 +20,14 @@ class PlotGeneration:
         for col in self.columns_to_plot:
             if col in df.columns:
                 df[col] = df[col].str.lower()
+                no_error_df = df[df[col] != "error"]
+
                 counts = df[col].value_counts()
+                no_error_counts = no_error_df[col].value_counts()
+
                 self.create_bar_graph(col, col + " distribution", counts, directory, filename)
+                col = col + "_noError"
+                self.create_bar_graph(col, col + " distribution", no_error_counts, directory, filename)
 
     def create_bar_graph(self, label, title, counts, directory, csv_filename):
         csv_filename = os.path.splitext(os.path.basename(csv_filename))[0]
