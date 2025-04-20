@@ -14,13 +14,14 @@ parent_dir = os.path.abspath(os.path.join(script_dir, ".."))
 sys.path.insert(0, parent_dir)
 from tools.prompts import Prompts
 
+
 def main():
     # read the parameters from the command line
     start_idx = int(sys.argv[1])
     end_idx = int(sys.argv[2])
     bias_data_path = sys.argv[3]
     dataset_folder = sys.argv[4]
-    
+
     prompt_idx = 0
     output_directory = "default"
     dataset_tag = "default"
@@ -31,7 +32,7 @@ def main():
 
     if len(sys.argv) > 6:
         output_directory = sys.argv[6]
-    
+
     if len(sys.argv) > 7:
         dataset_tag = sys.argv[7]
 
@@ -46,8 +47,7 @@ def main():
         lambda: Qwen2_5VL(cuda_number=cuda_number),
     ]
 
-    prompts = Prompts()
-    prompt = prompts.GetPrompt(prompt_idx)
+    prompt = Prompts.GetPrompt(prompt_idx)
 
     for model in model_classes:
         with model() as evaluator:
@@ -60,6 +60,7 @@ def main():
                 output_directory=output_directory,
                 dataset_tag=dataset_tag,
             )
+
 
 if __name__ == "__main__":
     main()
