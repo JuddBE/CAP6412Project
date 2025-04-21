@@ -126,14 +126,17 @@ class Prompts:
                 "Provide each answer on a new line with the selected option. "
                 "Do not restate the questions or include any extra text."
             ),
-            ("1. What is the gender of the person:" " male, female, or other."),
+            (
+                "1. What is the gender of the person:"
+                " male, female, or other."  # Putting this comment here so that the autoformatter keeps this on a separate line
+            ),
             (
                 "2. Which age group does the person appear to belong to:"
-                " child, teenager, adult, middle-aged, or senior."
+                " child, teenager, adult, middle-aged, or senior."  # Putting this comment here so that the autoformatter keeps this on a separate line
             ),
             (
                 "3. What is the apparent race or ethnicity of the person:"
-                " White, Black, Indian, East-Asian, Southeast-Asian, Middle-Eastern, or Latino."
+                " White, Black, Indian, East-Asian, Southeast-Asian, Middle-Eastern, or Latino."  # Putting this comment here so that the autoformatter keeps this on a separate line
             ),
         ],
     ]
